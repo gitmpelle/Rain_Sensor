@@ -1,4 +1,5 @@
 
+
 import esp32
 #####################################################################################
 from pichromecast import play_url, create_url
@@ -18,7 +19,7 @@ from ADS1115 import *
 import esp
 esp.osdebug(None)
 import json
-wake1 = Pin(14, mode = Pin.IN)
+wake1 = Pin(4, mode = Pin.IN,  pull=Pin.PULL_HOLD|Pin.PULL_UP)
 
 # Publish MQTT messages after every set timeout
 last_publish = time.time()
@@ -64,11 +65,12 @@ gc.collect()
 #########################################################################################################
 #level parameter can be: esp32.WAKEUP_ANY_HIGH or esp32.WAKEUP_ALL_LOW
 #esp32.wake_on_ext0(pin = wake1, level = esp32.WAKEUP_ANY_HIGH)
-esp32.wake_on_ext0(pin = wake1, level = esp32.WAKEUP_ALL_LOW)
+esp32.wake_on_ext0(pin = wake1, level = esp32.WAKEUP_ANY_HIGH)
 #your main code goes here to perform a task
 
 print('Im awake. Going to sleep in 10 seconds')
 sleep(10)
+
 print('Going to sleep now')
 deepsleep()
 
