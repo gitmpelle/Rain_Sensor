@@ -20,6 +20,48 @@ esp.osdebug(None)
 import json
 wake1 = Pin(14, mode = Pin.IN)
 
+# Publish MQTT messages after every set timeout
+last_publish = time.time()
+publish_interval = 60
+
+# Default  MQTT_BROKER to connect to
+CONFIG = {
+     # Configuration details of the MQTT broker
+     #https://www.srccodes.com/mqtt-cloudmqtt-mqtt-dashboard-android-esp8266-mycropython-home-automation-blub-internet-of-things-iot-m2m/
+     "MQTT_BROKER": "m15.cloudmqtt.com",
+     "USER": "quoaqddx",
+     "PASSWORD": "zaXkKvgMe7Hx",
+     "PORT": 12638,
+     "PUBLISH_TOPIC": b"cistern001Msg",
+     "SUBSCRIBE_TOPIC": b"cistern001",
+     
+     # unique identifier of the chip
+     "CLIENT_ID": b"esp32_" + ubinascii.hexlify(machine.unique_id())
+      }
+
+# Received messages from subscriptions will be delivered to this callback
+def sub_cb(topic, msg):
+    global last_publish
+    print(f"{getTime()} {topic.decode()} {msg.decode()}")
+
+def getTime():
+        timestamp=rtc.datetime()
+        timestring="%04d-%02d-%02d %02d:%02d:%02d"%(timestamp[0:3] +  timestamp[4:7])
+        return f'{timestring[0:20]}'
+########################################################################################################
+    print(f"Begin connection with MQTT Broker :: {CONFIG['MQTT_BROKER']}")
+    mqttClient = MQTTClient(CONFIG['CLIENT_ID'], CONFIG['MQTT_BROKER'], user=CONFIG['USER'], password=CONFIG['PASSWORD'], port=CONFIG['PORT'], keepalive=0)
+    mqttClient.set_callback(sub_cb)
+    mqttClient.connect()
+    mqttClient.subscribe(CONFIG['SUBSCRIBE_TOPIC'])
+    print(f"Connected to MQTT  Broker :: {CONFIG['MQTT_BROKER']}, and waiting for callback function to be called!")
+    mqttClient.publish(CONFIG['PUBLISH_TOPIC'], str('boot').encode())
+    gc.collect()
+
+
+
+
+#########################################################################################################
 #level parameter can be: esp32.WAKEUP_ANY_HIGH or esp32.WAKEUP_ALL_LOW
 esp32.wake_on_ext0(pin = wake1, level = esp32.WAKEUP_ANY_HIGH)
 
