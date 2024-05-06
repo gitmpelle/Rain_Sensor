@@ -1,9 +1,23 @@
 
 import esp32
-from machine import Pin
-from machine import deepsleep
+#####################################################################################
+from pichromecast import play_url, create_url
+import time
+import sys
+import ubinascii
+from umqtt.simple import MQTTClient
+import machine
+import random
+import ntptime
+rtc = machine.RTC()
+import gc
+gc.collect()
+from machine import I2C , Pin, deepsleep
 from time import sleep
-
+from ADS1115 import *
+import esp
+esp.osdebug(None)
+import json
 wake1 = Pin(14, mode = Pin.IN)
 
 #level parameter can be: esp32.WAKEUP_ANY_HIGH or esp32.WAKEUP_ALL_LOW
