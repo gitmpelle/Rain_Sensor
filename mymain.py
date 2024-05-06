@@ -32,8 +32,8 @@ CONFIG = {
      "USER": "quoaqddx",
      "PASSWORD": "zaXkKvgMe7Hx",
      "PORT": 12638,
-     "PUBLISH_TOPIC": b"cistern001Msg",
-     "SUBSCRIBE_TOPIC": b"cistern001",
+     "PUBLISH_TOPIC": b"Rain_SensorMsg",
+     "SUBSCRIBE_TOPIC": b"Rain_Sensor",
      
      # unique identifier of the chip
      "CLIENT_ID": b"esp32_" + ubinascii.hexlify(machine.unique_id())
@@ -49,25 +49,26 @@ def getTime():
         timestring="%04d-%02d-%02d %02d:%02d:%02d"%(timestamp[0:3] +  timestamp[4:7])
         return f'{timestring[0:20]}'
 ########################################################################################################
-    print(f"Begin connection with MQTT Broker :: {CONFIG['MQTT_BROKER']}")
-    mqttClient = MQTTClient(CONFIG['CLIENT_ID'], CONFIG['MQTT_BROKER'], user=CONFIG['USER'], password=CONFIG['PASSWORD'], port=CONFIG['PORT'], keepalive=0)
-    mqttClient.set_callback(sub_cb)
-    mqttClient.connect()
-    mqttClient.subscribe(CONFIG['SUBSCRIBE_TOPIC'])
-    print(f"Connected to MQTT  Broker :: {CONFIG['MQTT_BROKER']}, and waiting for callback function to be called!")
-    mqttClient.publish(CONFIG['PUBLISH_TOPIC'], str('boot').encode())
-    gc.collect()
+print(f"Begin connection with MQTT Broker :: {CONFIG['MQTT_BROKER']}")
+mqttClient = MQTTClient(CONFIG['CLIENT_ID'], CONFIG['MQTT_BROKER'], user=CONFIG['USER'], password=CONFIG['PASSWORD'], port=CONFIG['PORT'], keepalive=0)
+mqttClient.set_callback(sub_cb)
+mqttClient.connect()
+mqttClient.subscribe(CONFIG['SUBSCRIBE_TOPIC'])
+print(f"Connected to MQTT  Broker :: {CONFIG['MQTT_BROKER']}, and waiting for callback function to be called!")
+mqttClient.publish(CONFIG['PUBLISH_TOPIC'], str('1').encode())
+gc.collect()
 
 
 
 
 #########################################################################################################
 #level parameter can be: esp32.WAKEUP_ANY_HIGH or esp32.WAKEUP_ALL_LOW
-esp32.wake_on_ext0(pin = wake1, level = esp32.WAKEUP_ANY_HIGH)
-
+#esp32.wake_on_ext0(pin = wake1, level = esp32.WAKEUP_ANY_HIGH)
+esp32.wake_on_ext0(pin = wake1, level = esp32.WAKEUP_ALL_LOW)
 #your main code goes here to perform a task
 
 print('Im awake. Going to sleep in 10 seconds')
 sleep(10)
 print('Going to sleep now')
 deepsleep()
+
