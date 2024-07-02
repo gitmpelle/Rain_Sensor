@@ -1,76 +1,172 @@
-
-
-import esp32
-#####################################################################################
-from pichromecast import play_url, create_url
-import time
-import sys
-import ubinascii
-from umqtt.simple import MQTTClient
-import machine
-import random
+# Complete project details at https://RandomNerdTutorials.com
+# import boot
+rev = '070124-006'
+from machine import Pin, ADC
+from time import sleep,sleep_ms
+import time, json
 import ntptime
 rtc = machine.RTC()
-import gc
-gc.collect()
-from machine import I2C , Pin, deepsleep
-from time import sleep
-from ADS1115 import *
-import esp
-esp.osdebug(None)
-import json
-wake1 = Pin(4, mode = Pin.IN,  pull=Pin.PULL_HOLD|Pin.PULL_UP)
+from servo import Servo
+import ubinascii
 
-# Publish MQTT messages after every set timeout
-last_publish = time.time()
-publish_interval = 60
+zero_cross_count = 0 # global variable
+start = 0
+startTmr = 5
+led = Pin(2, Pin.OUT)
+swStart = Pin(23, Pin.OUT)
+pwr = Pin(4, mode = Pin.IN, pull = Pin.PULL_UP)
+rain = Pin(16, mode = Pin.IN, pull = Pin.PULL_UP)
+motor=Servo(pin=22) # A changer selon la broche utilisée
 
-# Default  MQTT_BROKER to connect to
-CONFIG = {
-     # Configuration details of the MQTT broker
-     #https://www.srccodes.com/mqtt-cloudmqtt-mqtt-dashboard-android-esp8266-mycropython-home-automation-blub-internet-of-things-iot-m2m/
-     "MQTT_BROKER": "m15.cloudmqtt.com",
-     "USER": "quoaqddx",
-     "PASSWORD": "zaXkKvgMe7Hx",
-     "PORT": 12638,
-     "PUBLISH_TOPIC": b"Rain_SensorMsg",
-     "SUBSCRIBE_TOPIC": b"Rain_Sensor",
-     
-     # unique identifier of the chip
-     "CLIENT_ID": b"esp32_" + ubinascii.hexlify(machine.unique_id())
-      }
+pot = ADC(Pin(34))
+pot.atten(ADC.ATTN_11DB)       #Full range: 3.3v
 
-# Received messages from subscriptions will be delivered to this callback
-def sub_cb(topic, msg):
-    global last_publish
-    print(f"{getTime()} {topic.decode()} {msg.decode()}")
-
+swStart.value(0)
+Rain = False
 def getTime():
         timestamp=rtc.datetime()
         timestring="%04d-%02d-%02d %02d:%02d:%02d"%(timestamp[0:3] +  timestamp[4:7])
         return f'{timestring[0:20]}'
-########################################################################################################
-print(f"Begin connection with MQTT Broker :: {CONFIG['MQTT_BROKER']}")
-mqttClient = MQTTClient(CONFIG['CLIENT_ID'], CONFIG['MQTT_BROKER'], user=CONFIG['USER'], password=CONFIG['PASSWORD'], port=CONFIG['PORT'], keepalive=0)
-mqttClient.set_callback(sub_cb)
-mqttClient.connect()
-mqttClient.subscribe(CONFIG['SUBSCRIBE_TOPIC'])
-print(f"Connected to MQTT  Broker :: {CONFIG['MQTT_BROKER']}, and waiting for callback function to be called!")
-mqttClient.publish(CONFIG['PUBLISH_TOPIC'], str('1').encode())
+    
+def zero_handle_interrupt(irq):
+  global zero_cross_count, Rain
+  zero_cross_count += 1
+  print(f"interrupt({irq})")
+  
+def rain_handle_interrupt(irq):
+    global  Rain, client
+    
+    if not Rain:
+        Rain = True
+   
+def sub_cb(topic, msg):
+  global pot
+  
+  print((topic, msg))
+  if topic == b'notification' and msg == b'received':
+    print('ESP received hello message')
+    
+  if msg == b'OTA':
+     #ota_updater() 
+     pass
+  if msg == b'START':
+     startGen() 
+     pass   
+
+  if msg == b'RESET':
+     machine.reset() 
+     pass 
+
+  if msg == b'LEVEL':
+     val = pot.read()
+     print(f"val = {val * (3.3 / 4095)} V")
+     pass
+
+def connect_and_subscribe():
+  global client_id, mqtt_server, topic_sub, topic_pub, port, mqpassword, mquser
+  client = MQTTClient(client_id, mqtt_server,user=mquser,password=mqpassword,port=port,keepalive=0)
+  client.set_callback(sub_cb)
+  client.connect()
+  client.subscribe(topic_sub,qos=0)
+  print('Connected to %s MQTT broker, subscribed to %s topic' % (mqtt_server, topic_sub))
+  return client
+
+
+def restart_and_reconnect():
+  print('Failed to connect to MQTT broker. Reconnecting...')
+  time.sleep(10)
+  machine.reset()
+
+# try:
+#   client = connect_and_subscribe()
+# except OSError as e:
+#   restart_and_reconnect()
+
+global client_id, mqtt_server, topic_sub, topic_pub, port, mqpassword, mquser
+client = connect_and_subscribe()
+msg = b'boot'
+client.publish(topic_pub, msg)
 gc.collect()
+print(f"{getTime()} {gc.threshold(gc.mem_free() // 4 + gc.mem_alloc())}")
 
+gc.collect()
+# Non-blocking wait for message
 
+pwr.irq(trigger=Pin.IRQ_RISING, handler=zero_handle_interrupt)
+rain.irq(trigger=Pin.IRQ_RISING, handler=rain_handle_interrupt)
 
+def startGen():
+        global zero_cross_count, motor
+        
+        motor.move(0) # tourne le servo à 0°
+        time.sleep(0.3)
+        motor.move(90) # tourne le servo à 90°
+        time.sleep(0.3)
+        motor.move(180) # tourne le servo à 180°
+        time.sleep(0.3)
+        motor.move(90) # tourne le servo à 90°
+        time.sleep(0.3)
+        motor.move(0) # tourne le servo à 0°
+        time.sleep(0.3)
+        #Start
+        swStart.value(1)
+        zero_cross_count = 0
+        #Start Timeout
+        timeout = 10000
+        start = time.ticks_ms()
 
-#########################################################################################################
-#level parameter can be: esp32.WAKEUP_ANY_HIGH or esp32.WAKEUP_ALL_LOW
-#esp32.wake_on_ext0(pin = wake1, level = esp32.WAKEUP_ANY_HIGH)
-esp32.wake_on_ext0(pin = wake1, level = esp32.WAKEUP_ANY_HIGH)
-#your main code goes here to perform a task
+        while True:
+          diff = time.ticks_diff(time.ticks_ms(), start)
+          
+          if diff > timeout:
+            print('Start Timeout')
+            print(f'AC not detected!')
+            swStart.value(0) #stop
+            break
 
-print('Im awake. Going to sleep in 10 seconds')
-sleep(10)
+          if zero_cross_count > 100:
+            print(f'AC detected!')
+            swStart.value(0) #stop
+            break
 
-print('Going to sleep now')
-deepsleep()
+          print(f'zero_cross_count: {zero_cross_count}')
+          led.value(1)
+          sleep_ms(100)
+          led.value(0)
+          sleep_ms(100)
 
+rc = machine.reset_cause()
+print('Reset Cause = ', rc)
+wlan_mac = station.config('mac')
+mac = ubinascii.hexlify(wlan_mac).decode().upper()
+
+while True:
+  try:
+    gc.collect()  
+    client.check_msg()
+    if (time.time() - last_message) > message_interval or Rain:
+        rainmsg = 0
+        if Rain:
+            Rain = False
+            rainmsg = 1
+        val = pot.read()
+        level = f"{val * (3.3 / 4095)}"        
+        message = {
+        'TIME':getTime(),
+        'rainmsg':rainmsg,
+        'level':level,
+        'mac':mac,
+        'rev':rev,
+        'counter':counter,
+        'reset_cause':rc
+        }
+        payload = json.dumps(message)
+        print(f"payload {payload}")
+        client.publish(topic_pub, payload)
+        last_message = time.time()
+        counter += 1
+        rc = 0
+  except OSError as e:
+    print(f'restart_and_reconnect() {e}')  
+    restart_and_reconnect()
+       
